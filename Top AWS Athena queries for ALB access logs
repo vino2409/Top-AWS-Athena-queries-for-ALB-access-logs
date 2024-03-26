@@ -1,0 +1,320 @@
+# Top AWS Athena queries for ALB access logs
+Here, in one place, are some valuable queries for extracting insights and troubleshooting potential problems that I have gathered myself during my SRE experience, or found and used from the web:
+1. Total Requests by Day:
+```
+SELECT 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS day,
+    COUNT(*) AS total_requests
+FROM alb_logs
+GROUP BY date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ'))
+ORDER BY day DESC;
+```
+
+2. Total Requests with HTTP Errors (>= 500) by Day:
+```
+SELECT 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS day,
+    COUNT(*) AS error_requests
+FROM alb_logs
+WHERE elb_status_code >= 500
+GROUP BY date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ'))
+ORDER BY day DESC;
+```
+
+3. Most Requested URLs:
+```
+SELECT 
+    request_url, 
+    COUNT(*) AS request_count 
+FROM alb_logs 
+GROUP BY request_url 
+ORDER BY request_count DESC 
+LIMIT 20;
+```
+
+4. Top Client IPs by Request Count:
+```
+SELECT 
+    client_ip, 
+    COUNT(*) AS request_count 
+FROM alb_logs 
+GROUP BY client_ip 
+ORDER BY request_count DESC 
+LIMIT 20;
+```
+
+5. Top URLs Returning Errors:
+```
+SELECT 
+    request_url, 
+    COUNT(*) AS error_count 
+FROM alb_logs 
+WHERE elb_status_code >= 500 
+GROUP BY request_url 
+ORDER BY error_count DESC 
+LIMIT 20;
+```
+
+6. Top User Agents:
+```
+SELECT 
+    user_agent, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY user_agent 
+ORDER BY count DESC 
+LIMIT 20;
+```
+
+7. Average Request Processing Time:
+```
+SELECT 
+    AVG(request_processing_time) AS avg_request_processing 
+FROM alb_logs;
+```
+
+8. URLs with Longest Processing Time:
+```
+SELECT 
+    request_url, 
+    AVG(request_processing_time) AS avg_time 
+FROM alb_logs 
+GROUP BY request_url 
+ORDER BY avg_time DESC 
+LIMIT 20;
+```
+
+9. Most Common SSL Protocols and Ciphers:
+```
+SELECT 
+    ssl_protocol, 
+    ssl_cipher, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY ssl_protocol, ssl_cipher 
+ORDER BY count DESC 
+LIMIT 20;
+```
+
+10. Lambda Error Insights:
+```
+SELECT 
+    lambda_error_reason, 
+    COUNT(*) AS error_count 
+FROM alb_logs 
+WHERE lambda_error_reason IS NOT NULL 
+GROUP BY lambda_error_reason 
+ORDER BY error_count DESC;
+```
+
+11. Most Accessed Domains:
+```
+SELECT 
+    domain_name, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY domain_name 
+ORDER BY count DESC;
+```
+
+12. Top Redirect URLs:
+```
+SELECT 
+    redirect_url, 
+    COUNT(*) AS count 
+FROM alb_logs 
+WHERE redirect_url IS NOT NULL 
+GROUP BY redirect_url 
+ORDER BY count DESC 
+LIMIT 20;
+```
+
+13. Failed Request Traces:
+```
+SELECT 
+    trace_id, 
+    request_url, 
+    elb_status_code 
+FROM alb_logs 
+WHERE elb_status_code >= 500 
+LIMIT 20;
+```
+
+14. Most Used ALBs:
+```
+SELECT 
+    elb, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY elb 
+ORDER BY count DESC;
+```
+
+15. Client Ports Usage:
+```
+SELECT 
+    client_port, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY client_port 
+ORDER BY count DESC 
+LIMIT 20;
+```
+
+16. Top Target IPs and Ports:
+```
+SELECT 
+    target_ip, 
+    target_port, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY target_ip, target_port 
+ORDER BY count DESC 
+LIMIT 20;
+```
+
+17. Most Frequent Target Status Codes:
+```
+SELECT 
+    target_status_code, 
+    COUNT(*) AS count 
+FROM alb_logs 
+GROUP BY target_status_code 
+ORDER BY count DESC;
+```
+
+18. Average Bytes Received by Day:
+```
+SELECT 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS day,
+    AVG(received_bytes) AS avg_received
+FROM alb_logs
+GROUP BY date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ'))
+ORDER BY day DESC;
+```
+
+19. Average Bytes Sent by Day:
+```
+SELECT 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS day,
+    AVG(sent_bytes) AS avg_sent
+FROM alb_logs
+GROUP BY date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ'))
+ORDER BY day DESC;
+```
+
+20. Requests with Processing Time > 1 Second:
+```
+SELECT 
+    request_url, 
+    request_processing_time + target_processing_time + response_processing_time AS total_processing_time
+FROM alb_logs 
+WHERE (request_processing_time + target_processing_time + response_processing_time) > 1
+ORDER BY total_processing_time DESC
+LIMIT 20;
+```
+
+## Some more advanced queries:
+These queries are designed to extract more nuanced insights or combine multiple pieces of information from your logs.
+1. Top 5 User Agents for 500 Errors:
+```
+SELECT 
+    user_agent, 
+    COUNT(*) AS error_count 
+FROM alb_logs 
+WHERE elb_status_code = 500
+GROUP BY user_agent 
+ORDER BY error_count DESC 
+LIMIT 5;
+```
+
+2. URLs with High Traffic but High Error Rates (more than 5% errors):
+```
+WITH total AS (
+    SELECT 
+        request_url, 
+        COUNT(*) AS total_requests
+    FROM alb_logs
+    GROUP BY request_url
+), errors AS (
+    SELECT 
+        request_url, 
+        COUNT(*) AS error_requests
+    FROM alb_logs 
+    WHERE elb_status_code >= 500
+    GROUP BY request_url
+)
+SELECT 
+    total.request_url, 
+    total.total_requests, 
+    COALESCE(errors.error_requests, 0) AS error_requests, 
+    COALESCE((errors.error_requests * 100.0 / total.total_requests), 0) AS error_rate
+FROM total
+LEFT JOIN errors ON total.request_url = errors.request_url
+WHERE COALESCE((errors.error_requests * 100.0 / total.total_requests), 0) > 5
+ORDER BY error_rate DESC 
+LIMIT 20;
+```
+
+3. Breakdown of Received and Sent Bytes by SSL Protocol:
+```
+SELECT 
+    ssl_protocol,
+    SUM(received_bytes) AS total_received_bytes, 
+    SUM(sent_bytes) AS total_sent_bytes 
+FROM alb_logs
+GROUP BY ssl_protocol 
+ORDER BY total_received_bytes DESC;
+```
+
+4. Average Processing Times for Each Verb (GET, POST, etc.):
+```
+SELECT 
+    request_verb, 
+    AVG(request_processing_time) AS avg_request_processing,
+    AVG(target_processing_time) AS avg_target_processing,
+    AVG(response_processing_time) AS avg_response_processing
+FROM alb_logs
+GROUP BY request_verb 
+ORDER BY avg_request_processing DESC, avg_target_processing DESC, avg_response_processing DESC;
+```
+
+5. Count of Requests By Hour for URLs with Error Rates Above 5%:
+```
+WITH error_urls AS (
+    SELECT 
+        request_url 
+    FROM alb_logs 
+    WHERE elb_status_code >= 500 
+    GROUP BY request_url 
+    HAVING COUNT(*) * 100.0 / (SELECT COUNT(*) FROM alb_logs WHERE request_url = error_urls.request_url) > 5
+)
+SELECT 
+    request_url,
+    extract(hour from parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS hour,
+    COUNT(*) AS request_count
+FROM alb_logs 
+WHERE request_url IN (SELECT request_url FROM error_urls)
+GROUP BY request_url, extract(hour from parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ'))
+ORDER BY request_url, hour;
+```
+
+6. Get requests with error count more than 10 and group them by day and request_url
+```
+SELECT 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')) AS day,
+    request_url,
+    count(*) as count
+FROM 
+    your_table_name
+WHERE 
+    CAST(elb_status_code AS int) >= 500
+GROUP BY 
+    date(parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSSZ')),
+    request_url
+HAVING 
+    count(*) > 10
+ORDER BY 
+    day, 
+    count DESC;
+```
