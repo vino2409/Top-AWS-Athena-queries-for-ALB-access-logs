@@ -1,3 +1,6 @@
+# Reference: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-s3-access-logs-to-identify-requests.html
+
+
 # Top AWS Athena queries for ALB access logs
 Here, in one place, are some valuable queries for extracting insights and troubleshooting potential problems that I have gathered myself during my SRE experience, or found and used from the web:
 1. Total Requests by Day:
